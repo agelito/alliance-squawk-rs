@@ -43,104 +43,35 @@ impl EventHandler for Bot {
                     let command = receiver.recv().await;
 
                     match command {
-                        Some(BotCommand::NotifyCorpJoinAlliance(alliance_id, corporation_id)) => {
-                            notify_join_alliance(
-                                &ctx,
-                                channel_id,
-                                &information,
-                                corporation_id,
-                                alliance_id,
-                            )
-                            .await
-                        }
-                        Some(BotCommand::NotifyCorpLeftAlliance(alliance_id, corporation_id)) => {
-                            notify_left_alliance(
-                                &ctx,
-                                channel_id,
-                                &information,
-                                corporation_id,
-                                alliance_id,
-                            )
-                            .await
+                        Some(command) => {
+                            send_notification(&ctx, channel_id, &information, command).await
                         }
                         None => {
                             tracing::warn!("channel closed, stopping command loop");
                             break;
                         }
-                    }
+                    };
                 }
             });
         }
     }
 }
 
-async fn notify_join_alliance(
+async fn send_notification(
     ctx: &Context,
     channel_id: u64,
     info: &InformationService,
-    corporation_id: i32,
-    alliance_id: i32,
+    command: BotCommand,
 ) {
-    tracing::info!(alliance_id, corporation_id, "send join notification");
-
-    let res = tokio::try_join!(
-        info.get_alliance(alliance_id),
-        info.get_corporation(corporation_id)
-    );
-
-    match res {
-        Ok((alliance, corporation)) => {
-            tracing::debug!(alliance_id, corporation_id, "esi data");
-
-            let alliance_link = format!(
-                "https://evemaps.dotlan.net/alliance/{}",
-                alliance.name.replace(' ', "_")
-            );
-            let corporation_link = format!(
-                "https://evemaps.dotlan.net/corp/{}",
-                corporation.name.replace(' ', "_")
-            );
-
-            let embed = CreateEmbed::new()
-                .title("Joined Alliance")
-                .field(
-                    "Corporation",
-                    format!(
-                        "{} ([{}]({}))",
-                        corporation.name, corporation.ticker, corporation_link
-                    ),
-                    false,
-                )
-                .field(
-                    "Alliance",
-                    format!(
-                        "{} ([{}]({}))",
-                        alliance.name, alliance.ticker, alliance_link
-                    ),
-                    false,
-                )
-                .color((0, 255, 0));
-
-            let builder = CreateMessage::new().embed(embed);
-            let message = ChannelId::new(channel_id).send_message(&ctx, builder).await;
-
-            tracing::debug!(?message, "composed message");
-
-            if let Err(err) = message {
-                tracing::error!(?err, "error sending notification");
-            }
+    let (alliance_id, corporation_id, msg) = match command {
+        BotCommand::NotifyCorpJoinAlliance(alliance_id, corporation_id) => {
+            (alliance_id, corporation_id, "Joined Alliance")
         }
-        Err(err) => tracing::error!(?err, "error fetching esi data"),
-    }
-}
+        BotCommand::NotifyCorpLeftAlliance(alliance_id, corporation_id) => {
+            (alliance_id, corporation_id, "Left Alliance")
+        }
+    };
 
-async fn notify_left_alliance(
-    ctx: &Context,
-    channel_id: u64,
-    info: &InformationService,
-    corporation_id: i32,
-    alliance_id: i32,
-) {
     tracing::info!(alliance_id, corporation_id, "send leave notification");
 
     let res = tokio::try_join!(
@@ -152,6 +83,10 @@ async fn notify_left_alliance(
         Ok((alliance, corporation)) => {
             tracing::debug!(alliance_id, corporation_id, "esi data");
 
+            if corporation.member_count < 10 {
+                return;
+            }
+
             let alliance_link = format!(
                 "https://evemaps.dotlan.net/alliance/{}",
                 alliance.name.replace(' ', "_")
@@ -162,13 +97,18 @@ async fn notify_left_alliance(
             );
 
             let embed = CreateEmbed::new()
-                .title("Left Alliance")
+                .title(msg)
                 .field(
                     "Corporation",
                     format!(
                         "{} ([{}]({}))",
                         corporation.name, corporation.ticker, corporation_link
                     ),
+                    false,
+                )
+                .field(
+                    "Member Count",
+                    format!("{}", corporation.member_count),
                     false,
                 )
                 .field(
@@ -179,7 +119,7 @@ async fn notify_left_alliance(
                     ),
                     false,
                 )
-                .color((255, 0, 0));
+                .color((188, 69, 255));
 
             let builder = CreateMessage::new().embed(embed);
             let message = ChannelId::new(channel_id).send_message(&ctx, builder).await;
