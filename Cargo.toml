@@ -1,0 +1,19 @@
+[package]
+name = "alliance_squawk"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.75"
+dotenv = "0.15.0"
+futures = "0.3.29"
+reqwest = { version = "0.11.22", features = ["json"] }
+serde = { version = "1.0.189", features = ["derive"] }
+serde_json = "1.0.107"
+serenity = "0.12.0"
+tokio = { version = "1.35.0", features = ["full"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+
+[dev-dependencies]
+tracing-test = "0.2.4"
