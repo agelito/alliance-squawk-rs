@@ -95,7 +95,7 @@ impl CorporationsService {
 
             let alliance_id = self.alliance_queue.pop_front().expect("queue is not empty");
 
-            tracing::info!(alliance_id, "updating alliance corporations");
+            tracing::debug!(alliance_id, "updating alliance corporations");
 
             let mut old_corporations = Vec::new();
 
