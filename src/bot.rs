@@ -10,6 +10,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::information_service::InformationService;
 
+#[allow(dead_code)]
 pub enum BotCommand {
     NotifyCorpJoinAlliance(i32, i32),
     NotifyCorpLeftAlliance(i32, i32),
@@ -72,7 +73,7 @@ async fn send_notification(
         }
     };
 
-    tracing::info!(alliance_id, corporation_id, "send leave notification");
+    tracing::info!(alliance_id, corporation_id, msg, "send notification");
 
     let res = tokio::try_join!(
         info.get_alliance(alliance_id),
