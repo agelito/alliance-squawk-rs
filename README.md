@@ -4,13 +4,7 @@ A discord bot which monitors alliance corporations and notifies a channel once a
 join or leave an alliance.
 
 ## Bot Permissions
-The bot need permissions to post messages with content. These permissions is viable when deploying the bot.
-
-### Message Content Intent
-![image](./docs/message-content-intent.png)
-
-### Permissions
-![image](./docs/bot-permissions.png)
+This bot only requires the 'Send Message' permission. It does not respond to commands or read messages sent by users.
 
 ## Configuration
 

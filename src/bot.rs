@@ -1,7 +1,7 @@
 use std::env;
 use std::sync::Arc;
 
-use serenity::all::{ChannelId, GuildId};
+use serenity::all::ChannelId;
 use serenity::async_trait;
 use serenity::builder::{CreateEmbed, CreateMessage};
 use serenity::model::gateway::Ready;
@@ -23,12 +23,8 @@ struct Bot {
 
 #[async_trait]
 impl EventHandler for Bot {
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         tracing::info!(bot_name = ready.user.name, "connected");
-    }
-
-    async fn cache_ready(&self, ctx: Context, _guilds: Vec<GuildId>) {
-        tracing::info!("cache ready");
 
         if let Some(mut receiver) = self.command_receiver.write().await.take() {
             let information = self
@@ -202,9 +198,9 @@ pub async fn run(info: InformationService, receiver: UnboundedReceiver<BotComman
     let token = env::var("DISCORD_TOKEN").expect("token in `DISCORD_TOKEN` environment variable");
     let channel_id = env::var("NOTIFY_CHANNEL_ID")
         .expect("channel id in `NOTIFY_CHANNEL_ID` environment variable")
-        .parse::<u64>().expect("channel is a valid integer");
-    let intents =
-        GatewayIntents::GUILDS | GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
+        .parse::<u64>()
+        .expect("channel is a valid integer");
+    let intents = GatewayIntents::GUILD_MESSAGES;
 
     let bot = Bot {
         channel_id,
