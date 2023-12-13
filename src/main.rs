@@ -10,7 +10,7 @@ mod information_service;
 
 #[tokio::main]
 async fn main() {
-    dotenv::dotenv().expect("existing .env file with configuration variables");
+    dotenv::dotenv().ok();
 
     tracing_subscriber::fmt::init();
 
