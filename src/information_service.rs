@@ -2,13 +2,14 @@ use std::collections::HashMap;
 
 use tokio::sync::RwLock;
 
-use crate::esi::{Alliance, Corporation, Esi};
+use crate::esi::{Alliance, Corporation, Esi, EsiID, System};
 
 #[derive(Debug)]
 pub struct InformationService {
     esi: Esi,
-    alliances: RwLock<HashMap<i32, Alliance>>,
-    corporations: RwLock<HashMap<i32, Corporation>>,
+    alliances: RwLock<HashMap<EsiID, Alliance>>,
+    corporations: RwLock<HashMap<EsiID, Corporation>>,
+    systems: RwLock<HashMap<EsiID, System>>,
 }
 
 impl InformationService {
@@ -17,10 +18,11 @@ impl InformationService {
             esi,
             alliances: Default::default(),
             corporations: Default::default(),
+            systems: Default::default(),
         }
     }
 
-    pub async fn get_alliance(&self, id: i32) -> anyhow::Result<Alliance> {
+    pub async fn get_alliance(&self, id: EsiID) -> anyhow::Result<Alliance> {
         // TODO(axel): Only get write lock if actually having to write value
         let mut alliances = self.alliances.write().await;
 
@@ -35,7 +37,7 @@ impl InformationService {
         }
     }
 
-    pub async fn get_corporation(&self, id: i32) -> anyhow::Result<Corporation> {
+    pub async fn get_corporation(&self, id: EsiID) -> anyhow::Result<Corporation> {
         // TODO(axel): Only get write lock if actually having to write value
         let mut corporations = self.corporations.write().await;
 
@@ -47,6 +49,20 @@ impl InformationService {
             corporations.insert(id, corporation.clone());
 
             Ok(corporation)
+        }
+    }
+
+    pub async fn get_system(&self, id: EsiID) -> anyhow::Result<System> {
+        let mut systems = self.systems.write().await;
+
+        if let Some(system) = systems.get(&id) {
+            Ok(system.clone())
+        } else {
+            let system = self.esi.get_system(id).await?;
+
+            systems.insert(id, system.clone());
+
+            Ok(system)
         }
     }
 }

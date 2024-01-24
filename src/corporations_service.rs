@@ -1,4 +1,4 @@
-use crate::esi::Esi;
+use crate::esi::{Esi, EsiID};
 use std::{
     cmp,
     collections::{HashMap, HashSet, VecDeque},
@@ -6,27 +6,27 @@ use std::{
 };
 use tokio::sync::mpsc::UnboundedSender;
 
-pub enum ServiceEvent {
-    JoinAlliance(i32, i32),
-    LeftAlliance(i32, i32),
+pub enum CorporationServiceEvent {
+    JoinAlliance(EsiID, EsiID),
+    LeftAlliance(EsiID, EsiID),
 }
 
 #[derive(Debug)]
 pub struct CorporationsService {
     esi: Esi,
-    alliance_queue: VecDeque<i32>,
+    alliance_queue: VecDeque<EsiID>,
 
-    alliance_seen: HashSet<i32>,
-    corporation_alliance: HashMap<i32, i32>,
+    alliance_seen: HashSet<EsiID>,
+    corporation_alliance: HashMap<EsiID, EsiID>,
 
     last_alliance_queue_update: Option<Instant>,
     last_alliance_queue_process: Option<Instant>,
 
-    event_sender: UnboundedSender<ServiceEvent>,
+    event_sender: UnboundedSender<CorporationServiceEvent>,
 }
 
 impl CorporationsService {
-    pub fn new(esi: Esi, sender: UnboundedSender<ServiceEvent>) -> CorporationsService {
+    pub fn new(esi: Esi, sender: UnboundedSender<CorporationServiceEvent>) -> CorporationsService {
         CorporationsService {
             esi,
             alliance_queue: Default::default(),
@@ -128,7 +128,7 @@ impl CorporationsService {
                                 if send_notifications
                                     && self
                                         .event_sender
-                                        .send(ServiceEvent::JoinAlliance(
+                                        .send(CorporationServiceEvent::JoinAlliance(
                                             alliance_id,
                                             corporation_id,
                                         ))
@@ -151,7 +151,7 @@ impl CorporationsService {
                                 if send_notifications
                                     && self
                                         .event_sender
-                                        .send(ServiceEvent::LeftAlliance(
+                                        .send(CorporationServiceEvent::LeftAlliance(
                                             alliance_id,
                                             corporation_id,
                                         ))
@@ -203,13 +203,13 @@ impl CorporationsService {
 
 #[derive(Debug, PartialEq)]
 enum AllianceOp {
-    Add(i32),
-    Del(i32),
+    Add(EsiID),
+    Del(EsiID),
 }
 
 fn corporation_alliance_delta(
-    old_corporations: &Vec<i32>,
-    new_corporations: &Vec<i32>,
+    old_corporations: &Vec<EsiID>,
+    new_corporations: &Vec<EsiID>,
 ) -> Vec<AllianceOp> {
     let mut repetitions = HashMap::new();
 

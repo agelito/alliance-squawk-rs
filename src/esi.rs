@@ -4,38 +4,59 @@ use serde::Deserialize;
 
 pub type ApiResult<T> = Result<T, anyhow::Error>;
 
-#[derive(Debug)]
+pub type EsiID = u64;
+
+#[derive(Debug, Clone)]
 pub struct Esi {
     client: Client,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Alliance {
-    pub creator_corporation_id: i32,
-    pub creator_id: i32,
+    pub creator_corporation_id: EsiID,
+    pub creator_id: EsiID,
     pub date_founded: String,
-    pub executor_corporation_id: Option<i32>,
-    pub faction_id: Option<i32>,
+    pub executor_corporation_id: Option<EsiID>,
+    pub faction_id: Option<EsiID>,
     pub name: String,
     pub ticker: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Corporation {
-    pub alliance_id: Option<i32>,
-    pub ceo_id: i32,
-    pub creator_id: i32,
+    pub alliance_id: Option<EsiID>,
+    pub ceo_id: EsiID,
+    pub creator_id: EsiID,
     pub date_founded: Option<String>,
     pub description: Option<String>,
-    pub faction_id: Option<i32>,
-    pub home_station_id: Option<i32>,
-    pub member_count: i32,
+    pub faction_id: Option<EsiID>,
+    pub home_station_id: Option<EsiID>,
+    pub member_count: EsiID,
     pub name: String,
-    pub shares: Option<i32>,
+    pub shares: Option<EsiID>,
     pub tax_rate: f32,
     pub ticker: String,
     pub url: Option<String>,
     pub war_eligible: Option<bool>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct SovereigntyStructure {
+    pub alliance_id: EsiID,
+    pub solar_system_id: EsiID,
+    pub structure_id: EsiID,
+    pub structure_type_id: EsiID,
+    pub vulnerability_occupancy_level: Option<f32>,
+    pub vulnerable_end_time: Option<String>,
+    pub vulnerable_start_time: Option<String>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct System {
+    pub system_id: EsiID,
+    pub constellation_id: EsiID,
+    pub name: String,
+    pub security_status: f32,
 }
 
 const BASE_URI: &str = "https://esi.evetech.net/latest/";
@@ -57,7 +78,7 @@ impl Esi {
         }
     }
 
-    pub async fn get_alliance_ids(&self) -> ApiResult<Vec<i32>> {
+    pub async fn get_alliance_ids(&self) -> ApiResult<Vec<EsiID>> {
         let url = create_endpoint_url("alliances/").context("create url")?;
 
         tracing::debug!(?url, "fetch alliances");
@@ -65,7 +86,7 @@ impl Esi {
         let response = self.client.get(url).send().await.context("/alliances/")?;
 
         let alliance_ids = response
-            .json::<Vec<i32>>()
+            .json::<Vec<EsiID>>()
             .await
             .context("parse /alliances/ response")?;
 
@@ -74,7 +95,7 @@ impl Esi {
         Ok(alliance_ids)
     }
 
-    pub async fn get_alliance(&self, alliance_id: i32) -> ApiResult<Alliance> {
+    pub async fn get_alliance(&self, alliance_id: EsiID) -> ApiResult<Alliance> {
         let resource = format!("alliances/{}/", alliance_id);
         let url = create_endpoint_url(&resource).context("create url")?;
 
@@ -88,21 +109,21 @@ impl Esi {
         Ok(alliance)
     }
 
-    pub async fn get_alliance_corporations(&self, alliance_id: i32) -> ApiResult<Vec<i32>> {
+    pub async fn get_alliance_corporations(&self, alliance_id: EsiID) -> ApiResult<Vec<EsiID>> {
         let resource = format!("alliances/{}/corporations/", alliance_id);
         let url = create_endpoint_url(&resource).context("create url")?;
 
         tracing::debug!(?url, "fetch alliance corporations");
 
         let response = self.client.get(url).send().await.context("fetch alliance corporations")?;
-        let corporations = response.json::<Vec<i32>>().await.context("parse alliance corporations")?;
+        let corporations = response.json::<Vec<EsiID>>().await.context("parse alliance corporations")?;
 
         tracing::debug!(?corporations, "response");
 
         Ok(corporations)
     }
 
-    pub async fn get_corporation(&self, corporation_id: i32) -> ApiResult<Corporation> {
+    pub async fn get_corporation(&self, corporation_id: EsiID) -> ApiResult<Corporation> {
         let resource = format!("corporations/{}", corporation_id);
         let url = create_endpoint_url(&resource).context("create url")?;
 
@@ -114,6 +135,34 @@ impl Esi {
         tracing::debug!(?corporation, "response");
 
         Ok(corporation)
+    }
+
+    pub async fn get_system(&self, system_id: EsiID) -> ApiResult<System> {
+        let resource = format!("universe/systems/{}", system_id);
+        let url = create_endpoint_url(&resource).context("create url")?;
+
+        tracing::debug!(?url, "fetch system");
+
+        let response = self.client.get(url).send().await.context("fetch system")?;
+        let system = response.json::<System>().await.context("parse system")?;
+
+        tracing::debug!(?system, "response");
+
+        Ok(system)
+    }
+
+    pub async fn get_sovereignty_structures(&self) -> ApiResult<Vec<SovereigntyStructure>> {
+        let resource = "sovereignty/structures/";
+        let url = create_endpoint_url(&resource).context("create url")?;
+
+        tracing::debug!(?url, "fetch sovereignty structures");
+
+        let response = self.client.get(url).send().await.context("fetch sovereignty structures")?;
+        let sovereignty_structures = response.json::<Vec<SovereigntyStructure>>().await.context("parse sovereignty structures")?;
+
+        tracing::debug!(structure_count=sovereignty_structures.len(), "response");
+
+        Ok(sovereignty_structures)
     }
 }
 
@@ -157,5 +206,14 @@ mod tests {
         let corporation = esi.get_corporation(98633922).await.unwrap();
 
         assert!(corporation.name.contains("Guns-R-Us Toy Company"));
+    }
+
+    #[traced_test]
+    #[tokio::test]
+    async fn get_sovereignty_structures() {
+        let esi = Esi::new();
+        let sovereignty_structures = esi.get_sovereignty_structures().await.unwrap();
+
+        assert!(!sovereignty_structures.is_empty());
     }
 }

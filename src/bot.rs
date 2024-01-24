@@ -1,25 +1,31 @@
 use std::env;
 use std::sync::Arc;
 
+use anyhow::Context as _;
 use serenity::all::ChannelId;
 use serenity::async_trait;
-use serenity::builder::{CreateEmbed, CreateMessage};
+use serenity::builder::{CreateEmbed, CreateMessage, CreateEmbedFooter};
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 use tokio::sync::mpsc::UnboundedReceiver;
 
+use crate::adm_service::AdmStatus;
+use crate::esi::EsiID;
 use crate::information_service::InformationService;
 
 #[allow(dead_code)]
-pub enum BotCommand {
-    NotifyCorpJoinAlliance(i32, i32),
-    NotifyCorpLeftAlliance(i32, i32),
+pub enum BotNotification {
+    NotifyCorpJoinAlliance(EsiID, EsiID),
+    NotifyCorpLeftAlliance(EsiID, EsiID),
+    NotifyAdm(EsiID, AdmStatus),
 }
+
+pub type BotResult = anyhow::Result<()>;
 
 struct Bot {
     channel_id: u64,
     information: RwLock<Option<InformationService>>,
-    command_receiver: RwLock<Option<UnboundedReceiver<BotCommand>>>,
+    command_receiver: RwLock<Option<UnboundedReceiver<BotNotification>>>,
 }
 
 #[async_trait]
@@ -58,22 +64,15 @@ impl EventHandler for Bot {
     }
 }
 
-async fn send_notification(
+async fn send_corp_notification(
     ctx: &Context,
     channel_id: u64,
     info: &InformationService,
-    command: BotCommand,
+    alliance_id: EsiID,
+    corporation_id: EsiID,
+    msg: &str,
 ) {
-    let (alliance_id, corporation_id, msg) = match command {
-        BotCommand::NotifyCorpJoinAlliance(alliance_id, corporation_id) => {
-            (alliance_id, corporation_id, "Joined Alliance")
-        }
-        BotCommand::NotifyCorpLeftAlliance(alliance_id, corporation_id) => {
-            (alliance_id, corporation_id, "Left Alliance")
-        }
-    };
-
-    tracing::info!(alliance_id, corporation_id, msg, "send notification");
+    tracing::info!(alliance_id, corporation_id, msg, "send corp notification");
 
     let res = tokio::try_join!(
         info.get_alliance(alliance_id),
@@ -135,12 +134,100 @@ async fn send_notification(
     }
 }
 
-pub async fn run(info: InformationService, receiver: UnboundedReceiver<BotCommand>) {
-    let token = env::var("DISCORD_TOKEN").expect("token in `DISCORD_TOKEN` environment variable");
+async fn send_adm_notification(
+    ctx: &Context,
+    channel_id: u64,
+    info: &InformationService,
+    system_id: EsiID,
+    status: AdmStatus,
+) {
+    tracing::info!(?status, ?system_id, "send adm notification");
+
+    match info.get_system(system_id).await {
+        Ok(system) => {
+            let (msg, footer, adm, color) = match status {
+                AdmStatus::Warning(adm) => (format!("{} ADM is deteriorated!", system.name), "Please do some ratting or mining here.", adm, (238, 210, 2)),
+                AdmStatus::Critical(adm) => (format!("{} ADM is critically low!", system.name), "Do ratting or mining here ASAP!!!", adm, (255, 103, 0)),
+            };
+
+            let system_link = format!("https://evemaps.dotlan.net/system/{}", system.name);
+
+            let embed = CreateEmbed::new()
+                .title(msg)
+                .field(
+                    "System",
+                    format!("[{}]({})", system.name, system_link),
+                    false,
+                )
+                .field("ADM", format!("{}", adm), true)
+                .footer(CreateEmbedFooter::new(footer))
+                .color(color);
+
+            let builder = CreateMessage::new().embed(embed);
+            let message = ChannelId::new(channel_id).send_message(&ctx, builder).await;
+
+            tracing::debug!(?message, "composed message");
+
+            if let Err(err) = message {
+                tracing::error!(?err, "error sending notification");
+            }
+        }
+        Err(err) => tracing::error!(?err, "error fetching esi data"),
+    }
+}
+
+async fn send_notification(
+    ctx: &Context,
+    channel_id: u64,
+    info: &InformationService,
+    command: BotNotification,
+) {
+    match command {
+        BotNotification::NotifyCorpJoinAlliance(alliance_id, corporation_id) => {
+            send_corp_notification(
+                ctx,
+                channel_id,
+                info,
+                alliance_id,
+                corporation_id,
+                "Joined Alliance",
+            )
+            .await;
+        }
+        BotNotification::NotifyCorpLeftAlliance(alliance_id, corporation_id) => {
+            send_corp_notification(
+                ctx,
+                channel_id,
+                info,
+                alliance_id,
+                corporation_id,
+                "Left Alliance",
+            )
+            .await;
+        }
+        BotNotification::NotifyAdm(system_id, adm_status) => {
+            send_adm_notification(ctx, channel_id, info, system_id, adm_status).await;
+        }
+    };
+}
+
+pub async fn run(
+    info: InformationService,
+    receiver: UnboundedReceiver<BotNotification>,
+) -> BotResult {
+    let token = env::var("DISCORD_TOKEN")
+        .map_err(|_| anyhow::Error::msg("missing `DISCORD_TOKEN` configuration variable"))
+        .context("configuration")?;
+
     let channel_id = env::var("NOTIFY_CHANNEL_ID")
-        .expect("channel id in `NOTIFY_CHANNEL_ID` environment variable")
-        .parse::<u64>()
-        .expect("channel is a valid integer");
+        .map_err(|_| anyhow::Error::msg("missing `NOTIFY_CHANNEL_ID` configuration variable"))
+        .and_then(|channel_id| {
+            channel_id.parse::<u64>().map_err(|_| {
+                anyhow::Error::msg("value in `NOTIFY_CHANNEL_ID` is not a valid integer")
+            })
+        })
+        .context("configuration")?;
+
     let intents = GatewayIntents::GUILD_MESSAGES;
 
     let bot = Bot {
@@ -152,9 +239,13 @@ pub async fn run(info: InformationService, receiver: UnboundedReceiver<BotComman
     let mut client = Client::builder(&token, intents)
         .event_handler(bot)
         .await
-        .expect("create client");
+        .context("create client")?;
 
-    if let Err(why) = client.start().await {
-        tracing::error!(?why, "client error");
-    }
+    client
+        .start()
+        .await
+        .map_err(|err| anyhow::Error::from(err))
+        .context("start client")?;
+
+    Ok(())
 }
