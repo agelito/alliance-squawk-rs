@@ -1,15 +1,15 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::RwLock;
 
 use crate::esi::{Alliance, Corporation, Esi, EsiID, System};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InformationService {
     esi: Esi,
-    alliances: RwLock<HashMap<EsiID, Alliance>>,
-    corporations: RwLock<HashMap<EsiID, Corporation>>,
-    systems: RwLock<HashMap<EsiID, System>>,
+    alliances: Arc<RwLock<HashMap<EsiID, Alliance>>>,
+    corporations: Arc<RwLock<HashMap<EsiID, Corporation>>>,
+    systems: Arc<RwLock<HashMap<EsiID, System>>>,
 }
 
 impl InformationService {
@@ -23,7 +23,6 @@ impl InformationService {
     }
 
     pub async fn get_alliance(&self, id: EsiID) -> anyhow::Result<Alliance> {
-        // TODO(axel): Only get write lock if actually having to write value
         let mut alliances = self.alliances.write().await;
 
         if let Some(alliance) = alliances.get(&id) {
@@ -38,7 +37,6 @@ impl InformationService {
     }
 
     pub async fn get_corporation(&self, id: EsiID) -> anyhow::Result<Corporation> {
-        // TODO(axel): Only get write lock if actually having to write value
         let mut corporations = self.corporations.write().await;
 
         if let Some(corporation) = corporations.get(&id) {

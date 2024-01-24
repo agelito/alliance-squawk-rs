@@ -1,15 +1,10 @@
-use crate::esi::{Esi, EsiID};
+use crate::{bot::BotNotification, esi::{Esi, EsiID}};
 use std::{
     cmp,
     collections::{HashMap, HashSet, VecDeque},
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::UnboundedSender;
-
-pub enum CorporationServiceEvent {
-    JoinAlliance(EsiID, EsiID),
-    LeftAlliance(EsiID, EsiID),
-}
 
 #[derive(Debug)]
 pub struct CorporationsService {
@@ -22,11 +17,11 @@ pub struct CorporationsService {
     last_alliance_queue_update: Option<Instant>,
     last_alliance_queue_process: Option<Instant>,
 
-    event_sender: UnboundedSender<CorporationServiceEvent>,
+    notifications: UnboundedSender<BotNotification>,
 }
 
 impl CorporationsService {
-    pub fn new(esi: Esi, sender: UnboundedSender<CorporationServiceEvent>) -> CorporationsService {
+    pub fn new(esi: Esi, notifications: UnboundedSender<BotNotification>) -> CorporationsService {
         CorporationsService {
             esi,
             alliance_queue: Default::default(),
@@ -34,7 +29,7 @@ impl CorporationsService {
             corporation_alliance: Default::default(),
             last_alliance_queue_update: None,
             last_alliance_queue_process: None,
-            event_sender: sender,
+            notifications,
         }
     }
 
@@ -124,21 +119,6 @@ impl CorporationsService {
                                 );
                                 self.corporation_alliance
                                     .insert(corporation_id, alliance_id);
-
-                                if send_notifications
-                                    && self
-                                        .event_sender
-                                        .send(CorporationServiceEvent::JoinAlliance(
-                                            alliance_id,
-                                            corporation_id,
-                                        ))
-                                        .is_err()
-                                {
-                                    tracing::warn!(
-                                        "aborting service because event channel was closed"
-                                    );
-                                    break 'running;
-                                }
                             }
                             AllianceOp::Del(corporation_id) => {
                                 tracing::debug!(
@@ -150,8 +130,8 @@ impl CorporationsService {
 
                                 if send_notifications
                                     && self
-                                        .event_sender
-                                        .send(CorporationServiceEvent::LeftAlliance(
+                                        .notifications
+                                        .send(BotNotification::NotifyCorpLeftAlliance(
                                             alliance_id,
                                             corporation_id,
                                         ))
@@ -166,14 +146,14 @@ impl CorporationsService {
                         };
                     }
                 }
-                Err(err) => {
-                    tracing::error!(?err, alliance_id, "error fetching corporations");
+                Err(_) => {
+                    tracing::warn!(alliance_id, "couldn't fetch corporations for alliance");
                 }
             }
         }
     }
 
-    pub async fn run(&mut self) {
+    pub async fn run(&mut self) -> anyhow::Result<()> {
         self.update_alliance_queue().await;
         self.process_alliance_queue(None).await;
 
