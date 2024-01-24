@@ -26,10 +26,15 @@ async fn main() {
 
     let token = env::var("DISCORD_TOKEN").expect("`DISCORD_TOKEN` configuration variable");
 
-    let channel_id = env::var("NOTIFY_CHANNEL_ID")
-        .expect("`NOTIFY_CHANNEL_ID` configuration variable")
+    let notify_corp_channel_id = env::var("NOTIFY_CORP_CHANNEL_ID")
+        .expect("`NOTIFY_CORP_CHANNEL_ID` configuration variable")
         .parse()
-        .expect("`NOTIFY_CHANNEL_ID` is a valid integer");
+        .expect("`NOTIFY_CORP_CHANNEL_ID` is a valid integer");
+
+    let notify_adm_channel_id = env::var("NOTIFY_ADM_CHANNEL_ID")
+        .expect("`NOTIFY_ADM_CHANNEL_ID` configuration variable")
+        .parse()
+        .expect("`NOTIFY_ADM_CHANNEL_ID` is a valid integer");
 
     let (notification_sender, notification_receiver) =
         tokio::sync::mpsc::unbounded_channel::<BotNotification>();
@@ -63,7 +68,8 @@ async fn main() {
                 adm_service,
                 notification_receiver,
                 token,
-                channel_id,
+                notify_adm_channel_id,
+                notify_corp_channel_id,
             )
             .await
             {

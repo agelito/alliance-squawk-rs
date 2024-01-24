@@ -27,7 +27,8 @@ pub enum BotNotification {
 pub type BotResult = anyhow::Result<()>;
 
 struct Bot {
-    channel_id: u64,
+    notify_corp_channel_id: u64,
+    notify_adm_channel_id: u64,
     information: InformationService,
     adm_service: AdmService,
     adm_configuration: AdmConfiguration,
@@ -53,7 +54,9 @@ impl EventHandler for Bot {
                     None
                 }
                 commands::adm_configure::COMMAND_NAME => {
-                    commands::adm_configure::run(&ctx, &command, &self.adm_configuration).await.unwrap();
+                    commands::adm_configure::run(&ctx, &command, &self.adm_configuration)
+                        .await
+                        .unwrap();
 
                     None
                 }
@@ -96,7 +99,8 @@ impl EventHandler for Bot {
             let information = self.information.clone();
 
             let ctx = Arc::new(ctx);
-            let channel_id = self.channel_id;
+            let corp_channel_id = self.notify_corp_channel_id;
+            let adm_channel_id = self.notify_adm_channel_id;
 
             tokio::spawn(async move {
                 loop {
@@ -104,7 +108,14 @@ impl EventHandler for Bot {
 
                     match command {
                         Some(command) => {
-                            send_notification(&ctx, channel_id, &information, command).await
+                            send_notification(
+                                &ctx,
+                                corp_channel_id,
+                                adm_channel_id,
+                                &information,
+                                command,
+                            )
+                            .await
                         }
                         None => {
                             tracing::warn!("channel closed, stopping command loop");
@@ -241,7 +252,8 @@ async fn send_adm_notification(
 
 async fn send_notification(
     ctx: &Context,
-    channel_id: u64,
+    corp_channel_id: u64,
+    adm_channel_id: u64,
     info: &InformationService,
     command: BotNotification,
 ) {
@@ -249,7 +261,7 @@ async fn send_notification(
         BotNotification::NotifyCorpJoinAlliance(alliance_id, corporation_id) => {
             send_corp_notification(
                 ctx,
-                channel_id,
+                corp_channel_id,
                 info,
                 alliance_id,
                 corporation_id,
@@ -260,7 +272,7 @@ async fn send_notification(
         BotNotification::NotifyCorpLeftAlliance(alliance_id, corporation_id) => {
             send_corp_notification(
                 ctx,
-                channel_id,
+                corp_channel_id,
                 info,
                 alliance_id,
                 corporation_id,
@@ -269,7 +281,7 @@ async fn send_notification(
             .await;
         }
         BotNotification::NotifyAdm(adm_status) => {
-            send_adm_notification(ctx, channel_id, info, adm_status).await;
+            send_adm_notification(ctx, adm_channel_id, info, adm_status).await;
         }
     };
 }
@@ -280,12 +292,14 @@ pub async fn run(
     adm: AdmService,
     receiver: UnboundedReceiver<BotNotification>,
     token: String,
-    notification_channel_id: u64,
+    notify_adm_channel_id: u64,
+    notify_corp_channel_id: u64,
 ) -> BotResult {
     let intents = GatewayIntents::GUILD_MESSAGES;
 
     let bot = Bot {
-        channel_id: notification_channel_id,
+        notify_adm_channel_id,
+        notify_corp_channel_id,
         adm_configuration,
         information: info,
         adm_service: adm,
