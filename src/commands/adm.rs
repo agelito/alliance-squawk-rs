@@ -1,12 +1,10 @@
 use anyhow::Context as _;
 use futures::future::try_join_all;
 use serenity::{
-    all::CommandInteraction,
-    builder::{
+    all::CommandInteraction, builder::{
         CreateCommand, CreateEmbed, CreateEmbedFooter, CreateInteractionResponse,
         CreateInteractionResponseFollowup, CreateInteractionResponseMessage,
-    },
-    client::Context,
+    }, client::Context, model::Permissions
 };
 
 use crate::services::{
@@ -89,4 +87,6 @@ pub async fn run(
 pub fn register() -> CreateCommand {
     CreateCommand::new(COMMAND_NAME)
         .description("Show which systems require attention due to low ADM.")
+        .default_member_permissions(Permissions::SEND_MESSAGES)
+        .dm_permission(true)
 }
