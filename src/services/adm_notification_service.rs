@@ -31,7 +31,7 @@ impl AdmNotificationService {
     pub async fn send_adm_notifications(&mut self) -> anyhow::Result<()> {
         self.last_adm_update = Some(Instant::now());
 
-        let system_adms = self.adm.get_adm_status().await;
+        let system_adms = self.adm.get_adm_status().await?;
 
         for system_adm in system_adms {
             let prev_adm = self.history.remove(&system_adm.system_id);

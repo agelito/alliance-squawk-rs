@@ -34,7 +34,7 @@ impl std::fmt::Display for Importance {
         match self {
             Importance::Red => write!(f, "Red (4.0 - 4.2)"),
             Importance::Yellow => write!(f, "Yellow (3.0 - 3.2)"),
-            Importance::Green => write!(f, "Green (1.0 - 1.2"),
+            Importance::Green => write!(f, "Green (1.0 - 1.2)"),
         }
     }
 }

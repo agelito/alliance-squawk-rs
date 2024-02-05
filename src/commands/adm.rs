@@ -1,10 +1,13 @@
 use anyhow::Context as _;
 use futures::future::try_join_all;
 use serenity::{
-    all::CommandInteraction, builder::{
+    all::CommandInteraction,
+    builder::{
         CreateCommand, CreateEmbed, CreateEmbedFooter, CreateInteractionResponse,
         CreateInteractionResponseFollowup, CreateInteractionResponseMessage,
-    }, client::Context, model::Permissions
+    },
+    client::Context,
+    model::Permissions,
 };
 
 use crate::services::{
@@ -30,8 +33,24 @@ pub async fn run(
 
     let system_adms = adm_service.get_adm_status().await;
 
+    if let Err(error) = system_adms {
+        tracing::error!("{}", error);
+
+        interaction
+            .create_followup(
+                &ctx.http,
+                CreateInteractionResponseFollowup::new()
+                    .content("Error fetching system ADM from ESI. Please try again later.")
+                    .ephemeral(true),
+            )
+            .await?;
+
+        return Ok(());
+    }
+
     let critical_systems: Vec<_> = system_adms
         .iter()
+        .flatten()
         .filter_map(|system_adm| match system_adm.status {
             Status::Critical(_) => Some(system_adm),
             _ => None,
@@ -51,6 +70,7 @@ pub async fn run(
 
     let warning_systems: Vec<_> = system_adms
         .iter()
+        .flatten()
         .filter_map(|system_adm| match system_adm.status {
             Status::Warning(_) => Some(system_adm),
             _ => None,

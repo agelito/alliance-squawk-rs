@@ -46,16 +46,11 @@ impl AdmService {
         }
     }
 
-    pub async fn get_adm_status(&self) -> Vec<SystemAdm> {
-        let sovereignty_structures = self.esi.get_sovereignty_structures().await;
-
-        if let Err(error) = &sovereignty_structures {
-            tracing::error!(?error, "couldn't fetch sovereignty structures");
-        }
+    pub async fn get_adm_status(&self) -> anyhow::Result<Vec<SystemAdm>> {
+        let sovereignty_structures = self.esi.get_sovereignty_structures().await?;
 
         let sovereignty_structures: Vec<_> = sovereignty_structures
             .iter()
-            .flatten()
             .filter(|sovereignty_structure| {
                 sovereignty_structure.alliance_id == self.alliance_id
                     && (self.include_tcus
@@ -115,12 +110,12 @@ impl AdmService {
             }
         }
 
-        systems
+        Ok(systems)
     }
 
     fn select_adm_status(adm: f32, warning_threshold: f32, critical_threshold: f32) -> Status {
-        let is_critical_state = adm <= critical_threshold;
-        let is_warning_state = adm <= warning_threshold;
+        let is_critical_state = adm < critical_threshold;
+        let is_warning_state = adm < warning_threshold;
 
         match (is_warning_state, is_critical_state) {
             (_, true) => Status::Critical(adm),
